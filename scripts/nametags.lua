@@ -15,6 +15,16 @@
 
 clua_version = 2.056
 
+-- ============================================================
+-- USER CONFIG
+-- ============================================================
+-- Widescreen 4:3-vs-16:9 is now AUTO-DETECTED (from Chimera's HUD width at a fixed
+-- halo.exe address - see read_projection). Leave this false. It's only a manual
+-- override: set true to force 4:3 if that detection address ever breaks on a new
+-- Halo/Chimera build.
+FORCE_4_3 = false
+-- ============================================================
+
 local nametags = {}  -- module-local state
 
 -- Every draw attempt gets logged here, newest last. debug_core.lua will
@@ -54,7 +64,7 @@ local function log_team(entry)
     end
 end
 
- 
+
 -- ============================================================
 -- Seat-index detection (confirmed in part by the user's own working code)
 --
@@ -207,7 +217,7 @@ end
 -- Head node world position.
 --
 -- The biped's skeletal node array holds each bone's WORLD translation. The head
--- is node 12, at biped + 0x7E8 - CONFIRMED for the player biped: among all 19 
+-- is node 12, at biped + 0x7E8 - CONFIRMED for the player biped: among all 19
 -- position nodes (base 0x578, stride 0x34) it was
 -- both the highest-z node (feet+0.561) AND the closest to the eye/camera
 -- (feet+0.62), i.e. the head. Works for standing AND seated bipeds (nodes are
@@ -256,37 +266,65 @@ local function dot(a,b)
 end
 
 -- ============================================================
--- ASPECT RATIO. Only used to derive the vertical FOV from the horizontal FOV in
--- world_to_screen. Chimera's widescreen fix keeps the internal height at 480 and
--- widens the effective width, so SCREEN_WIDTH/480 is the render aspect:
---     16:9  -> 853.333   (widescreen fix ON)
---     4:3   -> 640        (widescreen fix OFF)
--- The width MATTERS: with the widescreen fix off the world renders 4:3 and tags
--- are mis-centred if we assume 16:9. So we detect the mode at runtime rather than
--- hardcode. (An earlier heap value 0x69FBB290 that flipped 640<->746 was a red
--- herring - not the render aspect; the window measured true 16:9 959x540.)
-local SCREEN_HEIGHT = 480
-local WIDTH_16_9    = 853.333
-local WIDTH_4_3     = 640
-
--- Aspect: default 16:9. Runtime auto-detection was REMOVED as unreliable.
--- The widescreen_fix (0x6D124874) / font_override (0x6D11BD44) bytes live in the
--- Chimera module ("strings.dll"), whose base is RELOCATED by ASLR each launch, so
--- those hardcoded ABSOLUTE addresses drift between runs. On a bad launch they read
--- stale 0 -> mis-detected as 4:3 -> tags shifted ~1.33x left. A failed read is
--- safe (falls back to 16:9) but a successful stale-zero read is indistinguishable
--- from real 4:3, so the addresses can't be trusted without resolving the module
--- base (no Chimera Lua API exposes it) or reading Chimera's prefs file.
+-- PROJECTION SCALE (derived from Chimera's lua_draw_text source).
 --
--- For a native 4:3 setup, set the override below to 640.
-local SCREEN_WIDTH_OVERRIDE = nil   -- nil = 16:9 (853.333); set 640 for 4:3
-local function read_screen_width()
-    return (SCREEN_WIDTH_OVERRIDE or WIDTH_16_9), nil
+-- lua_draw_text scales the x-coords you pass by
+--     width_scale = (monitor_aspect * 480) / 640     (= monitor_aspect * 0.75)
+-- (y is NOT scaled) and draws into the widescreen HUD space. Net effect:
+--   * widescreen fix ON  -> your input x-space is a CONSTANT 640 wide (centre
+--     320) for ANY monitor aspect: the scale cancels the HUD expansion. The 3D
+--     world renders at the monitor aspect, so the VERTICAL FOV uses that aspect.
+--   * widescreen fix OFF -> native HUD is 640 (4:3); your input centre becomes
+--     320/(monitor_aspect*0.75) (e.g. 240 @1080p) and the render is 4:3.
+--
+-- Widescreen state is DETECTED (not assumed) from Chimera's effective HUD width,
+-- at a FIXED halo.exe address (base 0x400000, no ASLR - verified stable across a
+-- reboot, and across 1080p/720p with font-override & widescreen both toggled):
+--     halo.exe+0x2E4750 (abs 0x6E4750) = HUD width, int32
+--        ~832 = widescreen render (853 - margins) ; ~620 = 4:3 (640 - margins)
+-- Chimera's font-override / draw_text code maintains this, so it bakes in BOTH
+-- widescreen_fix AND font_override (which forces widescreen on) - one read gives
+-- the combined effective state. Threshold >680 splits them (any widescreen aspect
+-- is >=~747; 4:3 is ~620). Implausible read -> assume widescreen (safe default).
+-- FORCE_4_3 (top of file) is a manual override for if this addr breaks on a build.
+--
+-- Monitor aspect (for the vertical FOV) is read live from the game RESOLUTION,
+-- also at a FIXED halo.exe address:
+--     halo.exe+0x29C638 (abs 0x69C638) = height uint16   e.g. 1080
+--     halo.exe+0x29C63A (abs 0x69C63A) = width  uint16   e.g. 1920
+-- (Chimera finds resolution via sig 75 0A 66 A1 ?? ?? ?? ?? 66 89 42 04 83 C4 10 C3.)
+-- All three addresses are build-specific; guarded fallbacks keep projection sane.
+local RES_HEIGHT_ADDR = 0x69C638
+local RES_WIDTH_ADDR  = 0x69C63A
+local HUD_WIDTH_ADDR  = 0x6E4750   -- Chimera effective HUD width int32: ~832 widescreen / ~620 4:3
+
+-- True if the render is widescreen (16:9/16:10/...), false if 4:3. FORCE_4_3
+-- overrides; an unreadable/implausible value safe-defaults to widescreen.
+local function is_widescreen_render()
+    if FORCE_4_3 then return false end
+    local ok, w = pcall(read_dword, HUD_WIDTH_ADDR)
+    if ok and type(w) == "number" and w > 300 and w < 4000 then
+        return w > 680
+    end
+    return true
 end
 
--- Current render width + raw mode, refreshed once per frame in OnPreCamera.
-local SCREEN_WIDTH = WIDTH_16_9
-local _widescreen_mode = nil
+-- Returns (half_w, vfov_aspect): the horizontal input half-extent (screen centre)
+-- and the aspect used to derive the vertical FOV. Refreshed each frame.
+local function read_projection()
+    local wok, w = pcall(read_word, RES_WIDTH_ADDR)
+    local hok, h = pcall(read_word, RES_HEIGHT_ADDR)
+    local monitor_aspect = (wok and hok and type(w) == "number" and type(h) == "number"
+                            and w >= 320 and h >= 240) and (w / h) or (16 / 9)
+    if is_widescreen_render() then
+        return 320, monitor_aspect                       -- widescreen: input centre constant 320
+    end
+    return 320 / (monitor_aspect * 0.75), (4 / 3)         -- 4:3 render
+end
+
+-- Refreshed once per frame in OnPreCamera.
+local _half_w = 320
+local _vfov_aspect = 16 / 9
 
 -- ============================================================
 -- CAMERA CAPTURE (core - required for standalone operation)
@@ -305,8 +343,8 @@ function OnPreCamera(x, y, z, fov, ox1, oy1, oz1, ox2, oy2, oz2)
         look = { ox1, oy1, oz1 },
         up = { ox2, oy2, oz2 },
     }
-    -- Refresh render width from the widescreen-fix mode (4:3 vs 16:9).
-    SCREEN_WIDTH, _widescreen_mode = read_screen_width()
+    -- Refresh projection scale (horizontal centre + vertical-FOV aspect).
+    _half_w, _vfov_aspect = read_projection()
     -- if cal_on then draw_calibration() end  -- uncomment when tagcal.lua is merged
     -- Draw here (not in preframe) so tags use THIS frame's camera - see
     -- DrawNametags. DrawNametags is a global defined later in the chunk; the
@@ -364,21 +402,18 @@ local function world_to_screen(wx, wy, wz)
     local hfov = cam.fov or 1.502154
     local half_hfov = hfov / 2.0
 
-    -- Derive vertical fov from horizontal fov + real pixel aspect ratio,
-    -- rather than reusing half_hfov for both axes (the actual bug).
-    local aspect = SCREEN_WIDTH / SCREEN_HEIGHT
-    local half_vfov = math.atan(math.tan(half_hfov) / aspect)
+    -- Derive vertical fov from horizontal fov + render aspect (do NOT reuse the
+    -- horizontal fov for both axes). _vfov_aspect = monitor aspect (widescreen on)
+    -- or 4:3 (FORCE_4_3); see read_projection.
+    local half_vfov = math.atan(math.tan(half_hfov) / _vfov_aspect)
 
     local ndc_x = (x / z) / math.tan(half_hfov)
     local ndc_y = (y / z) / math.tan(half_vfov)
 
-    -- Horizontal draw_text coordinate space is MODE-DEPENDENT (verified by the
-    -- tagcal ruler): 16:9 -> 640 wide (centre 320), 4:3 -> 480 wide (centre 240).
-    -- In both, draw_width = 0.75 * SCREEN_WIDTH (640/853.333 = 480/640 = 0.75),
-    -- so the horizontal half-extent is 0.375 * SCREEN_WIDTH. Vertical stays 480
-    -- (centre 240) in both modes. Hardcoding 320 put 4:3 tags ~1.33x too far out.
-    local half_w = SCREEN_WIDTH * 0.375   -- 320 (16:9) or 240 (4:3)
-    local screen_x = half_w + ndc_x * half_w
+    -- Horizontal: input x-space centre is _half_w (constant 320 while the
+    -- widescreen fix is on, for any monitor aspect - see read_projection).
+    -- Vertical: always the 480-tall space (centre 240); draw_text does not scale y.
+    local screen_x = _half_w + ndc_x * _half_w
     local screen_y = 240 - ndc_y * 240
 
     return screen_x, screen_y
@@ -560,7 +595,7 @@ end
 --         debug_log   = nametags.debug_log,
 --         vehicle_log = nametags.vehicle_log,
 --         team_log    = nametags.team_log,
---         screen      = { widescreen_mode = _widescreen_mode, screen_width = SCREEN_WIDTH },
+--         screen      = { half_w = _half_w, vfov_aspect = _vfov_aspect },
 --         errors      = nametags.errors,
 --     }
 -- end)

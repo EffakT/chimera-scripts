@@ -49,44 +49,68 @@ Fonts (height in the 480-tall space): `"smaller"` ≈ 11px, `"small"` ≈ 15px,
 
 ## Screen coordinate space (this bites people)
 
-`draw_text` coordinates are a **virtual space with a fixed height of 480**. The
-**horizontal width depends on Chimera's widescreen fix**:
+`draw_text` coordinates are a **virtual space with a fixed height of 480**. From
+the script's side the measured layout is:
 
-| mode  | draw-space width | centre |
-| ----- | ---------------- | ------ |
-| 16:9  | **640**          | 320    |
-| 4:3   | **480**          | 240    |
+| mode          | input width | centre |
+| ------------- | ----------- | ------ |
+| widescreen ON | **640**     | 320    |
+| 4:3 (@1080p)  | **480**     | 240    |
 
-The pattern that held in both modes: `draw_width = 0.75 × internal_render_width`
-(where render width is `853.333` for 16:9 or `640` for 4:3). So the horizontal
-half-extent is `0.375 × render_width`.
+**Why (from Chimera's `lua_draw_text` source):** it scales the x-coords you pass by
+`width_scale = monitor_aspect × 0.75` (y is *not* scaled) and draws into the
+widescreen HUD space. That scale exactly cancels the HUD expansion, so:
 
-How this was measured: draw left-aligned labels at known x-coords and read where
-they land on a screenshot. In 4:3 the ruler came out at a clean **2.0 px per
-coord** (coord 480 = right edge, coord 240 = centre); in 16:9 it was 1.5 px/coord
-(coord 640 = right edge). This "calibration overlay" trick is the reliable way to
-learn any draw-space behaviour — don't reason about it, measure it.
+- **Widescreen fix ON → the input space is a constant `640` wide (centre `320`)
+  for *any* monitor aspect** (16:9, 16:10, ultrawide). The 3D world renders at the
+  monitor aspect, so only the **vertical FOV** needs that aspect.
+- **Widescreen fix OFF →** native HUD is 640 (4:3), so the input centre =
+  `320 / (monitor_aspect × 0.75)` (= 240 at 1080p) and the render is 4:3.
 
-### Detecting the aspect at runtime
+So `half_w = 320` is correct for all widescreen-on setups — *don't* derive it from
+the resolution (a naive `0.375 × render_width` gives 288 at 16:10). This was
+confirmed both by reading Chimera's source and by a **calibration overlay**: draw
+left-aligned labels at known x and read where they land (4:3 came out a clean
+2.0 px/coord, coord 480 = right edge, 240 = centre). Measure draw-space behaviour,
+don't assume it.
 
-There is **no Chimera Lua API for the resolution** (I dumped all globals). But the
-widescreen state is readable from two static bytes (Chimera-module, i.e.
-`strings.dll`, addresses — **version dependent**):
+### Getting the aspect (for vertical FOV) at runtime
+
+There's **no Chimera Lua API for the resolution** (I dumped all globals). The
+horizontal centre is the constant 320 above; the one per-monitor value you still
+need is the aspect for the **vertical FOV** = the monitor aspect. Read it from the
+game's **resolution struct** at a FIXED `halo.exe` address (base `0x400000`, no
+ASLR — launch-stable *and* live):
 
 ```lua
--- VERIFY these on your build before trusting them.
-local WIDESCREEN_FIX = 0x6D124874  -- 0 = off/4:3, non-zero = on/16:9
-local FONT_OVERRIDE  = 0x6D11BD44  -- non-zero FORCES widescreen on
+-- halo.exe resolution struct (build-specific; verify on your build)
+local RES_HEIGHT = 0x69C638   -- uint16, e.g. 1080   (halo.exe+0x29C638)
+local RES_WIDTH  = 0x69C63A   -- uint16, e.g. 1920   (halo.exe+0x29C63A)
+
+local function monitor_aspect()
+    local w, h = read_word(RES_WIDTH), read_word(RES_HEIGHT)
+    if w and h and w >= 320 and h >= 240 then return w / h end
+    return 16/9
+end
 ```
 
-`font_override` forces widescreen on, so the render is **16:9 if EITHER byte is
-non-zero, and 4:3 only when BOTH are zero**. Guard the reads and default to 16:9
-so a bad read never wrongly forces 4:3 (which mis-scales everything).
+Chimera locates this struct via signature scan — pattern
+`75 0A 66 A1 ?? ?? ?? ?? 66 89 42 04 83 C4 10 C3`, where the `mov ax,[<addr>]`
+operand is the struct address. Re-find it that way on a new build (Cheat Engine
+array-of-bytes scan with read-only memory enabled).
+
+**Pitfall — don't read the Chimera widescreen_fix flag for the mode.** The
+`widescreen_fix` / `font_override` bytes live in Chimera's injected `strings.dll`,
+which **ASLR relocates every launch**, so hardcoded absolute addresses drift, read
+stale 0, and get mis-detected as 4:3 (tags shift ~1.33× left). Because `half_w` is
+a constant 320 for widescreen-on anyway, you don't need the flag in the normal
+case; the rare 4:3-off case is a manual toggle. (The resolution struct is in
+fixed-base `halo.exe`, so it has no such problem — but note it's the *monitor*
+aspect, which equals the render aspect only while the fix is on.)
 
 > A separate heap value that flipped `640 ↔ 746` with the widescreen fix looked
-> promising but was a **red herring** — it was a Chimera-internal number, not the
-> render aspect (the window measured a true 16:9). Always cross-check a candidate
-> value against a screenshot before wiring it in.
+> promising but was a **red herring** — a Chimera-internal number, not the render
+> aspect (the window measured a true 16:9). Always cross-check against a screenshot.
 
 ---
 
@@ -98,8 +122,7 @@ reuse the horizontal FOV for both axes (that was the root cause of a "right
 direction, wrong amount" vertical error).
 
 ```lua
--- render_width = 853.333 (16:9) or 640 (4:3); see aspect detection above
-local aspect  = render_width / 480
+local aspect  = monitor_aspect()  -- render aspect (see above); widescreen-on
 local half_h  = cam.fov / 2
 local half_v  = math.atan(math.tan(half_h) / aspect)
 
@@ -116,9 +139,9 @@ if z <= 0 then return nil end     -- behind camera
 local ndc_x = (x / z) / math.tan(half_h)
 local ndc_y = (y / z) / math.tan(half_v)
 
-local half_w   = render_width * 0.375           -- 320 (16:9) or 240 (4:3)
-local screen_x = half_w + ndc_x * half_w
-local screen_y = 240   - ndc_y * 240            -- height is 480 in both modes
+local half_w   = 320                            -- constant (widescreen on, any aspect)
+local screen_x = half_w + ndc_x * half_w        -- input space is 640 wide, centre 320
+local screen_y = 240   - ndc_y * 240            -- height 480, y never scaled
 ```
 
 ---
@@ -262,7 +285,8 @@ cross-script globals. Callbacks are also one-per-event-per-state: only one
 | seat index `0x2F0`: 0/1/2 = drv/pass/gun | **verified**                           |
 | vehicle orient `0x74`/`0x80`            | **verified** (unit vectors)             |
 | team field `0x20`                       | verified as a team field; 0=Red mapping **assumed** |
-| widescreen `0x6D124874` / font_override `0x6D11BD44` | **verified on build 1262; version dependent** |
+| resolution struct `halo.exe+0x29C638` (h) / `+0x29C63A` (w) | **verified; fixed-base halo.exe, launch-stable** |
+| widescreen bytes in Chimera `strings.dll`  | **ASLR-unstable across launches — abandoned** |
 | head node index (12) / layout          | **model dependent** — sanity-check + fallback |
 
 ---

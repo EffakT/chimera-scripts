@@ -145,19 +145,21 @@ Color order is **ARGB** (alpha first). Confirmed from working call in this proje
 Fonts: `"smaller"` (11px), `"small"` (15px), `"large"`, `"ticker"`, `"console"`, `"system"`.
 Alignment: `"left"`, `"center"`, `"right"`.
 
-**Coordinate space is MODE-DEPENDENT horizontally; height always 480.**
-- Widescreen ON (16:9): horizontal space is **640 wide** (centre 320). Calibration
-  ruler: left-aligned x = 0/160/320/426/480 → internal 0.7/160.2/321.0/427.1/481.2.
-- Widescreen OFF (4:3): horizontal space is **480 wide** (centre 240). Ruler
-  (dump `20260702_090226`): x = 0/160/320/426 → px 486/805/1126/1338 = a clean
-  **2.0 px/coord**, i.e. coord 480 hits the window's right edge and coord 240 the
-  centre.
+**Coordinate space (input side): height always 480; horizontal centre depends on
+the widescreen fix.** Measured with the calibration ruler:
+- Widescreen ON (16:9): input space **640 wide**, centre **320** (x =
+  0/160/320/426/480 → internal 0.7/160.2/321.0/427.1/481.2).
+- Widescreen OFF (4:3, 1080p): input space **480 wide**, centre **240** (x = 0/160/320/426 → px 486/805/1126/1338 ≈ 2.0 px/coord).
 
-The pattern: `draw_width = 0.75 × SCREEN_WIDTH` (640/853.333 = 480/640 = 0.75), so
-the horizontal half-extent = `0.375 × SCREEN_WIDTH` (320 in 16:9, 240 in 4:3).
-`world_to_screen` computes `screen_x = half_w + ndc_x*half_w` with
-`half_w = 0.375*SCREEN_WIDTH` — do NOT hardcode 320 (that put 4:3 tags ~1.33× too
-far out). Vertical is `240 - ndc_y*240` in both modes. Never rescale to 853.
+WHY (from Chimera's `lua_draw_text` source): it scales your x by
+`width_scale = monitor_aspect × 0.75` and draws into the widescreen HUD space.
+That cancels the HUD expansion, so with the **widescreen fix ON the input centre
+is a CONSTANT 320 for ANY monitor aspect** (not just 16:9). With the fix OFF the
+native HUD is 640, so the input centre = `320/(monitor_aspect×0.75)` (= 240 @1080p).
+`world_to_screen` uses `screen_x = _half_w + ndc_x*_half_w`, `_half_w = 320`
+(widescreen on) — a flat 320 is CORRECT here; the earlier `0.375×SCREEN_WIDTH`
+form only matched 16:9 by luck (it gave 288 @16:10). Vertical is `240 - ndc_y*240`
+in both modes (y is never scaled).
 
 ### console_out
 ```lua
@@ -296,30 +298,41 @@ Cross product order `cross(right, forward)` for `true_up` is **correct** —
 an earlier "fix" attempt to flip it to `cross(forward, right)` was wrong and
 reverted. Do not change without re-deriving against real camera+target samples.
 
-Screen centre: horizontal = `0.375 * SCREEN_WIDTH` (**320** in 16:9, **240** in
-4:3 — see draw_text coordinate space above), vertical = **240** (height 480, both
-modes). Output feeds `draw_text` directly, no rescaling. `SCREEN_WIDTH` (853.333
-or 640) is used two ways: `/480` for the vertical-FOV aspect, and `*0.375` for the
-horizontal half-extent. Both are mode-dependent and driven by the widescreen-fix
-read (below).
+Screen centre: horizontal = `_half_w` = **320** (constant while the widescreen fix
+is on, any monitor aspect — see draw_text coordinate space above; `FORCE_4_3`
+gives `320/(aspect×0.75)`, e.g. 240 @1080p). Vertical = **240** (height 480, both
+modes; y is never scaled). Output feeds `draw_text` directly, no rescaling. The
+only per-monitor value needed is the **vertical-FOV aspect** = the monitor aspect,
+read live from the resolution struct (below).
 
-**Aspect: default 16:9; 4:3 is a manual override.** `SCREEN_WIDTH` feeds both the
-vertical-FOV aspect (`/480`) and the horizontal half-extent (`*0.375`, → 320 in
-16:9 / 240 in 4:3). It defaults to 853.333 (16:9); for a native 4:3 setup set
-`SCREEN_WIDTH_OVERRIDE = 640` in `read_screen_width`.
+**Horizontal centre is a constant 320 (widescreen on); vertical FOV uses the live
+monitor aspect.** This is derived from Chimera's `lua_draw_text` source, which
+scales the x-coords you pass by `width_scale = monitor_aspect × 0.75` (y is not
+scaled) and draws into the widescreen HUD space. The scale exactly cancels the HUD
+expansion, so:
+- **widescreen fix ON** → your input x-space is a **constant 640 wide (centre
+  320) for ANY monitor aspect** (16:9, 16:10, ultrawide). `_half_w = 320`.
+- **widescreen fix OFF** → native HUD is 640 (4:3); input centre becomes
+  `320 / (monitor_aspect × 0.75)` = **240 @1080p** (this reproduces the 240 we
+  measured in the 4:3 dumps). The render is 4:3, so vfov aspect = 4/3.
 
-**Runtime auto-detection was tried and REMOVED (unreliable).** The widescreen
-state is readable from `0x6D124874` (widescreen_fix) / `0x6D11BD44` (font_override,
-which *forces* widescreen on) — verified working in a couple of sessions — BUT
-those bytes live in the **Chimera module ("strings.dll"), which is ASLR-relocated
-each launch**, so the hardcoded absolute addresses drift. On a bad launch they
-read stale **0** → mis-detected as 4:3 → tags shifted ~1.33× left. A *failed* read
-is safe (→16:9) but a *stale-zero* read is indistinguishable from real 4:3, so the
-addresses can't be trusted. A launch-stable signal would need the module base
-resolved (no Chimera Lua API exposes it) or Chimera's prefs file read. (Note: the
-main `haloce.exe` module IS at a fixed base — e.g. race_hud's `0x68CC48` — but no
-widescreen/resolution field was found there; and an earlier heap value
-`0x69FBB290` flipping 640↔746 was a RED HERRING, not the render aspect.)
+`read_projection()` returns `(half_w, vfov_aspect)`, refreshed each frame. The
+**vertical FOV** needs the real render aspect = the monitor aspect, read live from
+the game RESOLUTION at a FIXED `halo.exe` address (base 0x400000, no ASLR):
+
+```
+halo.exe+0x29C638 (abs 0x69C638) = height uint16   e.g. 1080
+halo.exe+0x29C63A (abs 0x69C63A) = width  uint16   e.g. 1920
+```
+
+(Chimera finds this via signature `75 0A 66 A1 ?? ?? ?? ?? 66 89 42 04 83 C4 10 C3`;
+build-specific, guarded fallback to 16:9.)
+
+We can't reliably read the widescreen-fix flag (it's in Chimera's ASLR-relocated
+`strings.dll` — hardcoding it drifted, read stale 0, mis-detected 4:3, tags ~1.33×
+left), so we **assume ON** and expose `FORCE_4_3 = true` for the rare
+widescreen-off setup. (An earlier heap value `0x69FBB290` flipping 640↔746 was a
+RED HERRING, not the render aspect.)
 
 **Status: VERIFIED.** The full projection (position + head offset) was checked
 against the visible biped in dumps `080754`/`081945` — projected head landed on

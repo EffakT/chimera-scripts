@@ -3,10 +3,9 @@ halo_debug_bridge.py
 
 Watches for chimera_debug_dump.json (written by debug_core.lua when you
 type dbgdump in Halo's console), grabs a screenshot of the Halo window
-at that moment, and bundles both into one payload ready to send to Claude.
+at that moment, and bundles both into one payload.
 
-This intentionally does NOT call the Claude API itself - it just produces
-the bundle. Wire up the actual API call once you've confirmed the bundle
+Wire up the actual API call once you've confirmed the bundle
 looks right (see `build_bundle()` / the __main__ block below for where
 that goes).
 
@@ -123,8 +122,6 @@ def take_screenshot(out_path: Path) -> Path:
 def build_bundle(dump_data: dict, screenshot_path: Path) -> dict:
     """
     Combines the structured game-state dump with a pointer to the screenshot.
-    This is the object you'd hand to Claude - e.g. as the text portion of an
-    API call, with the screenshot attached as an image content block.
     """
     return {
         "captured_at": datetime.now().isoformat(),
@@ -172,10 +169,6 @@ def handle_new_dump(dump_path: Path):
         json.dump(bundle, f, indent=2)
 
     print(f"[{timestamp}] Captured dump + screenshot -> {session_dir}")
-
-    # ---- Hook point: send `bundle` + image at `screenshot_path` to Claude here ----
-    # e.g.:
-    # send_to_claude(bundle, screenshot_path)
 
 
 if __name__ == "__main__":
