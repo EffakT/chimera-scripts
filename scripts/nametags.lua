@@ -166,7 +166,7 @@ local function get_player_world_position(id)
             -- short of the actual seat. The biped's TRUE world position is at
             -- +0xA0/0xA4/0xA8 while seated.
             --
-            -- VERIFIED (dump 20260701_123901, gunner): +0xA0 = (17.865,-15.224,
+            -- VERIFIED (gunner): +0xA0 = (17.865,-15.224,
             -- 1.551) projected to internal x=332.7, matching the target waypoint
             -- above the gunner at 329.7; the old origin+local math landed at
             -- x=242 (~90 px left). +0xA0 is roughly the biped centre/torso, so
@@ -178,7 +178,7 @@ local function get_player_world_position(id)
             -- +0xA0 is the biped CENTRE/torso, whereas the on-foot read (+0x5C)
             -- is the FEET. The draw code adds a single TAG_HEIGHT (0.7, tuned for
             -- feet) to whatever we return, so a raw torso z puts seated tags too
-            -- high (dump 20260701_124452: passenger tag ~28 px above the head).
+            -- high (passenger tag ~28 px above the head).
             -- Drop to a feet-equivalent so the shared +TAG_HEIGHT lands the tag
             -- just above the head for both on-foot and seated players. +0xA0
             -- projects onto the auto-aim reticle (biped centre), ~0.33 above the
@@ -212,8 +212,8 @@ end
 -- Head node world position.
 --
 -- The biped's skeletal node array holds each bone's WORLD translation. The head
--- is node 12, at biped + 0x7E8 - CONFIRMED for the player biped in dump
--- 20260702_074318: among all 19 position nodes (base 0x578, stride 0x34) it was
+-- is node 12, at biped + 0x7E8 - CONFIRMED for the player biped: among all 19
+-- position nodes (base 0x578, stride 0x34) it was
 -- both the highest-z node (feet+0.561) AND the closest to the eye/camera
 -- (feet+0.62), i.e. the head. Works for standing AND seated bipeds (nodes are
 -- computed for rendering either way), and follows crouch/pose - unlike the
@@ -444,7 +444,7 @@ local function get_team_color(team)
 end
 
 -- Nametag rendering runs in OnPreCamera (NOT preframe). Confirmed via event_log
--- (dump 20260701_131815): the order each frame is preframe -> precamera, so
+-- the order each frame is preframe -> precamera, so
 -- drawing in preframe used the PREVIOUS frame's camera (captured at the last
 -- precamera) and the tags lagged one frame behind camera motion. Calling this
 -- from OnPreCamera, right after _last_camera is set from the current frame's

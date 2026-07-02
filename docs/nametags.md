@@ -44,10 +44,39 @@ CALIBRATION` block at the bottom of `nametags.lua`. **Keep `debug_core.lua` and
 separate scripts; `debug_core` also prints startup noise + resolves its dump dir).
 
 ### Files
-- `nametags.lua` — merged file containing both the nametag rendering logic and
-  the full DebugCore framework. Placed in `chimera\lua\scripts\global\`.
+- `nametags.lua` — the standalone renderer. The ONLY file deployed to
+  `chimera\lua\scripts\global\`. Contains rendering, camera capture, projection,
+  aspect detection, and lightweight logging (no DebugCore dependency).
+- `debug_core.lua` — reusable JSON state-dump framework (merge-in snippet).
+- `tagcal.lua` — reusable calibration overlay (merge-in snippet).
 - `halo_debug_bridge.py` — Python watcher that detects dump file changes,
-  screenshots the game window, and bundles both for sending to Claude.
+  screenshots the game window, and bundles both.
+
+### Repository layout
+The scripts + docs live in a git repo laid out to separate what Chimera
+auto-loads from the paste-in tools:
+
+```
+chimera-lua-toolkit/
+├── README.md
+├── LICENSE
+├── scripts/
+│   ├── global/                   # DEPLOY: copy into chimera\lua\scripts\global\
+│   │   └── nametags.lua
+│   └── snippets/                 # NOT auto-loaded — paste into a script to debug
+│       ├── debug_core.lua
+│       └── tagcal.lua
+├── tools/
+│   └── halo_debug_bridge.py
+└── docs/
+    ├── chimera-lua-reference.md  # verified findings guide (headline doc)
+    ├── nametags.md               # this file — project knowledge / architecture
+    └── instructions.md           # terse context primer
+```
+
+Only `scripts/global/nametags.lua` is deployed. The `snippets/` files are merged
+into it by hand when debugging (see the merge-snippet note above), which is why
+they must NOT sit in the game's `global/` folder.
 
 ### Output path (dynamic, no hardcoded usernames)
 DebugCore writes to:

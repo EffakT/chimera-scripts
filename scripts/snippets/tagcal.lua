@@ -29,7 +29,7 @@ clua_version = 2.056
 --      boxes; if their text centers on each box, "center" is box-relative;
 --      if both land at the same x, "center" is viewport-relative.
 -- left-align is the trusted anchor here: the first glyph's LEFT edge sits
--- at the `left` coordinate (confirmed from dump 20260701_080754).
+-- at the `left` coordinate.
 -- ============================================================
 cal_on = false
 cal_on = false
