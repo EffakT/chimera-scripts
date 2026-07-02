@@ -207,7 +207,7 @@ end
 -- Head node world position.
 --
 -- The biped's skeletal node array holds each bone's WORLD translation. The head
--- is node 12, at biped + 0x7E8 - CONFIRMED for the player biped: among all 19
+-- is node 12, at biped + 0x7E8 - CONFIRMED for the player biped: among all 19 
 -- position nodes (base 0x578, stride 0x34) it was
 -- both the highest-z node (feet+0.561) AND the closest to the eye/camera
 -- (feet+0.62), i.e. the head. Works for standing AND seated bipeds (nodes are
@@ -269,26 +269,19 @@ local SCREEN_HEIGHT = 480
 local WIDTH_16_9    = 853.333
 local WIDTH_4_3     = 640
 
--- Render aspect comes from TWO Chimera settings (STATIC bytes, found via Cheat
--- Engine, stable across restarts; "strings.dll" == the Chimera module):
---   0x6D124874 = widescreen_fix  (0 = off/4:3, non-zero = on/16:9)
---   0x6D11BD44 = font_override    (non-zero FORCES widescreen on)
--- Because font_override forces widescreen on, the render is 16:9 if EITHER byte
--- is non-zero, and 4:3 ONLY when BOTH are zero. Reads are guarded: if a byte
--- can't be read we default that side toward 16:9 (never wrongly force 4:3, which
--- would mis-scale). VERSION-DEPENDENT addresses; total-read-failure -> 16:9.
-local WIDESCREEN_FIX_ADDR = 0x6D124874
-local FONT_OVERRIDE_ADDR  = 0x6D11BD44
+-- Aspect: default 16:9. Runtime auto-detection was REMOVED as unreliable.
+-- The widescreen_fix (0x6D124874) / font_override (0x6D11BD44) bytes live in the
+-- Chimera module ("strings.dll"), whose base is RELOCATED by ASLR each launch, so
+-- those hardcoded ABSOLUTE addresses drift between runs. On a bad launch they read
+-- stale 0 -> mis-detected as 4:3 -> tags shifted ~1.33x left. A failed read is
+-- safe (falls back to 16:9) but a successful stale-zero read is indistinguishable
+-- from real 4:3, so the addresses can't be trusted without resolving the module
+-- base (no Chimera Lua API exposes it) or reading Chimera's prefs file.
+--
+-- For a native 4:3 setup, set the override below to 640.
+local SCREEN_WIDTH_OVERRIDE = nil   -- nil = 16:9 (853.333); set 640 for 4:3
 local function read_screen_width()
-    local ws_ok, ws = pcall(read_byte, WIDESCREEN_FIX_ADDR)
-    local fo_ok, fo = pcall(read_byte, FONT_OVERRIDE_ADDR)
-    ws = (ws_ok and type(ws) == "number") and ws or nil
-    fo = (fo_ok and type(fo) == "number") and fo or nil
-    -- 4:3 only when BOTH read successfully and are 0; anything else -> 16:9.
-    if ws == 0 and fo == 0 then
-        return WIDTH_4_3, ws
-    end
-    return WIDTH_16_9, ws
+    return (SCREEN_WIDTH_OVERRIDE or WIDTH_16_9), nil
 end
 
 -- Current render width + raw mode, refreshed once per frame in OnPreCamera.
