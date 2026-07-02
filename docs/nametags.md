@@ -303,23 +303,23 @@ or 640) is used two ways: `/480` for the vertical-FOV aspect, and `*0.375` for t
 horizontal half-extent. Both are mode-dependent and driven by the widescreen-fix
 read (below).
 
-**Aspect ratio is detected at runtime from two Chimera settings.** `SCREEN_WIDTH`
-is refreshed each frame by `read_screen_width()`, which reads two static bytes:
-- **`0x6D124874` = widescreen_fix** (0 = off/4:3, non-zero = on/16:9)
-- **`0x6D11BD44` = font_override** (a *separate* setting that **forces widescreen
-  on** when non-zero)
+**Aspect: default 16:9; 4:3 is a manual override.** `SCREEN_WIDTH` feeds both the
+vertical-FOV aspect (`/480`) and the horizontal half-extent (`*0.375`, → 320 in
+16:9 / 240 in 4:3). It defaults to 853.333 (16:9); for a native 4:3 setup set
+`SCREEN_WIDTH_OVERRIDE = 640` in `read_screen_width`.
 
-Because font_override forces widescreen on, the render is **16:9 if EITHER byte
-is non-zero, and 4:3 ONLY when BOTH are zero**. (Don't treat `0x6D11BD44` as a
-second copy of widescreen_fix — it's font_override; it only matters because of
-the force-on behaviour.) `SCREEN_WIDTH` feeds both the vertical-FOV aspect
-(`/480`) and the horizontal half-extent (`*0.375`). Reads are guarded: 4:3 is
-concluded only when both bytes read 0, so a failed/garbage read defaults toward
-16:9 (never wrongly forces 4:3, which would mis-scale). Notes: no Chimera Lua API
-exposes resolution (122 globals dumped via a `tagapi` probe); an earlier heap
-value `0x69FBB290` (flips 640↔746) was a RED HERRING (window measured true 16:9
-959×540). The `0x6D…` addresses are Chimera-module ("strings.dll") statics,
-stable across restarts — version-dependent, hence the safe fallback.
+**Runtime auto-detection was tried and REMOVED (unreliable).** The widescreen
+state is readable from `0x6D124874` (widescreen_fix) / `0x6D11BD44` (font_override,
+which *forces* widescreen on) — verified working in a couple of sessions — BUT
+those bytes live in the **Chimera module ("strings.dll"), which is ASLR-relocated
+each launch**, so the hardcoded absolute addresses drift. On a bad launch they
+read stale **0** → mis-detected as 4:3 → tags shifted ~1.33× left. A *failed* read
+is safe (→16:9) but a *stale-zero* read is indistinguishable from real 4:3, so the
+addresses can't be trusted. A launch-stable signal would need the module base
+resolved (no Chimera Lua API exposes it) or Chimera's prefs file read. (Note: the
+main `haloce.exe` module IS at a fixed base — e.g. race_hud's `0x68CC48` — but no
+widescreen/resolution field was found there; and an earlier heap value
+`0x69FBB290` flipping 640↔746 was a RED HERRING, not the render aspect.)
 
 **Status: VERIFIED.** The full projection (position + head offset) was checked
 against the visible biped in dumps `080754`/`081945` — projected head landed on
