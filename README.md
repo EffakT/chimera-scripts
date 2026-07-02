@@ -97,8 +97,7 @@ chimera-scripts/
 Teammate-only nametags are a HUD/QoL feature — teammate positions are already
 surfaced by the game (nav markers), so this grants no advantage over opponents.
 Rendering **enemy** info would be ESP; the team filter keeps this on the fair
-side. Note that some competitive rulesets ban *any* client-side overlay
-regardless — check yours.
+side.
 
 ---
 
