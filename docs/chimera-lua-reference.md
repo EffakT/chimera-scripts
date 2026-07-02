@@ -1,16 +1,20 @@
 # Chimera Lua — Verified Field Notes (Projection, Nametags & Memory)
 
 Practical, **empirically verified** notes gathered while building a client-side
-nametag/ESP mod with Chimera. Everything here was tested against real logged game
+teammate **nametag/HUD** mod with Chimera. Everything here was tested against real logged game
 state + screenshots, not copied from documentation — where a value is a guess or
 convention it is labelled as such.
 
 **Environment these were verified on:** retail Halo PC *Combat Evolved* via
 Chimera (build 1262), Lua 5.5, `clua_version = 2.056`, run in a window.
 
+**Scope:** the nametag mod targets **retail Halo PC only** — *Halo Custom Edition*
+already has built-in nametags, so it's unnecessary there. (The API/projection/
+memory notes below are still generally useful on either.)
+
 > **Golden rule:** treat every memory offset as *unverified until tested against
 > real logged data on your build*. Static addresses in particular are
-> version/build dependent. We were burned twice trusting "authoritative" values
+> version/build dependent. I was burned twice trusting "authoritative" values
 > (a guessed FOV constant and a third-party offset that conflicted with reality).
 
 ---
@@ -65,7 +69,7 @@ learn any draw-space behaviour — don't reason about it, measure it.
 
 ### Detecting the aspect at runtime
 
-There is **no Chimera Lua API for the resolution** (we dumped all globals). But the
+There is **no Chimera Lua API for the resolution** (I dumped all globals). But the
 widescreen state is readable from two static bytes (Chimera-module, i.e.
 `strings.dll`, addresses — **version dependent**):
 
@@ -164,7 +168,12 @@ local name = table.concat(chars)
 **Team** — `read_byte(get_player(id) + 0x20)`. It *is* a team field (compare for
 equality). The specific mapping (0 = Red, 1 = Blue) is the usual convention but
 was **not independently verified** — use equality, not the numeric value, if you
-can. Handy for teammate-only ESP.
+can. Use it to show tags for **teammates only**.
+
+> **On "ESP":** drawing tags for *teammates* is a HUD/QoL feature — teammate
+> positions are already surfaced by the game (nav markers), so it grants no edge
+> over opponents. It only becomes ESP (an unfair advantage) if you render
+> **enemy** info. Keep the team filter on; reserve "ESP" for the enemy case.
 
 ---
 
@@ -255,3 +264,13 @@ cross-script globals. Callbacks are also one-per-event-per-state: only one
 | team field `0x20`                       | verified as a team field; 0=Red mapping **assumed** |
 | widescreen `0x6D124874` / font_override `0x6D11BD44` | **verified on build 1262; version dependent** |
 | head node index (12) / layout          | **model dependent** — sanity-check + fallback |
+
+---
+
+## Thanks
+
+Much of the baseline Chimera Lua model here — event hooks, `draw_text`,
+`get_player`/`get_dynamic_player`, timers, tags, name reading — is well laid out in
+Chalwk's blog, which was the starting point for a lot of this:
+**[Scripting with Chimera — Client-Side Lua](https://chalwk.github.io/blog/2026/05/17/halo-scripting-with-chimera/)**.
+The findings above are what I then verified/corrected/extended on my own build.

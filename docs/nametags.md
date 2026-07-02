@@ -2,16 +2,19 @@
 
 This file is the canonical project-knowledge document for the nametag mod.
 It is kept in `chimera\lua\scripts\global\` alongside the actual scripts.
-A new Claude session should read this before touching any code.
 
 ---
 
 ## What This Project Is
 
-A Chimera Lua client-side mod for Halo PC/Custom Edition (Combat Evolved, not
-Custom Edition specifically) that draws floating name tags above other players'
-heads with team colouring, plus a reusable `DebugCore` framework that dumps
-live game state to JSON for debugging via a Python bridge.
+A Chimera Lua client-side mod for **retail Halo PC (Combat Evolved)** that draws
+floating name tags above other players' heads with team colouring, plus a reusable
+`DebugCore` framework that dumps live game state to JSON for debugging via a Python
+bridge.
+
+**Scope:** retail Halo PC only. *Halo Custom Edition* already has built-in
+nametags, so this mod is unnecessary there (the memory/projection findings still
+apply generally).
 
 ---
 
@@ -57,12 +60,9 @@ The scripts + docs live in a git repo laid out to separate what Chimera
 auto-loads from the paste-in tools:
 
 ```
-chimera-lua-toolkit/
-├── README.md
-├── LICENSE
-├── scripts/
-│   ├── global/                   # DEPLOY: copy into chimera\lua\scripts\global\
-│   │   └── nametags.lua
+chimera-scripts/
+├── scripts/                 # DEPLOY: copy into chimera\lua\scripts\global\
+│   ├── nametags.lua
 │   └── snippets/                 # NOT auto-loaded — paste into a script to debug
 │       ├── debug_core.lua
 │       └── tagcal.lua
@@ -71,7 +71,6 @@ chimera-lua-toolkit/
 └── docs/
     ├── chimera-lua-reference.md  # verified findings guide (headline doc)
     ├── nametags.md               # this file — project knowledge / architecture
-    └── instructions.md           # terse context primer
 ```
 
 Only `scripts/global/nametags.lua` is deployed. The `snippets/` files are merged
@@ -400,7 +399,7 @@ to a real dump in-conversation.
    player motion). ROOT CAUSE confirmed via `event_log` (dump `20260701_131815`):
    the callbacks fire **preframe → precamera** every frame, so drawing in
    `preframe` used the camera captured at the PREVIOUS frame's `precamera` (one
-   frame stale). Having our own `OnPreCamera` wasn't enough because we still DREW
+   frame stale). Having its own `OnPreCamera` wasn't enough because it still DREW
    in preframe. FIX: nametag render moved into `DrawNametags()`, called from
    `OnPreCamera` right after `_last_camera` is set from the current frame's camera
    args. Verified in-game: lag gone AND `draw_text` DOES render when issued during
