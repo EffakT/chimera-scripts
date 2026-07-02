@@ -12,11 +12,6 @@
   calibration overlay + `tagcal`). Lightweight ring-buffer logging (draw_log,
   vehicle_log, team_log) is kept here so debug_core can read it once merged.
 --]]
--- DONE: "attempt to index a nil value (local 'v')" in norm() - was world_to_screen running in preframe on the first frame before precamera set the camera (nil). Fixed by drawing in OnPreCamera (see DrawNametags / Known Issues #3).
--- DONE (pending in-game verify): enemy team nametags hidden - DrawNametags only renders players whose team == local player's team (equality, mapping-agnostic). Fail-safe hides all if own team unreadable. Verify get_player+0x20 really is team via a team-game dump.
--- DONE: 4:3 vs 16:9 handled at runtime from Chimera's widescreen-fix mode (static addrs 0x6D124874 / 0x6D11BD44: 0=off->4:3, 1-3=on->16:9). This drives BOTH the vertical-FOV aspect (SCREEN_WIDTH/480) AND the horizontal draw centre (0.375*SCREEN_WIDTH: 320 in 16:9, 240 in 4:3) - the 4:3 draw space is 480 wide, not 640. Fallback to 16:9 if the read is out of range. Verified working in both modes. See read_screen_width / world_to_screen.
--- WONTFIX: move nametag above the team indicator triangle - tag uses biped centre-of-mass (+0xA0); for seated players that sits a shoulder-width off the triangle and the offset flips by seat side, and no readable field matches the triangle. Left at centre-of-mass (per-player, on the right player). See nametags.md Known Issues #1.
--- DONE: need a check for "is font-override enabled", as this is separate to widescreen-fix check.
 
 clua_version = 2.056
 
