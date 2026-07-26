@@ -1,114 +1,301 @@
 # chimera-scripts
 
-Client-side **Lua for retail Halo PC (Combat Evolved) via [Chimera](https://github.com/SnowyMouse/chimera)** — a
-teammate **nametag/HUD** mod, plus two reusable drop-in debug tools and a set of
-empirically-verified reference notes.
+Client-side **Lua for retail Halo PC (Combat Evolved) via [Chimera](https://github.com/SnowyMouse/chimera)** — currently including a teammate **nametag/HUD mod**, an experimental **HRL ghost replay system**, reusable debugging tools, and empirically verified engine-reference notes.
 
-> **Scope:** retail Halo PC only. Halo *Custom Edition* already has built-in
-> nametags, so the mod is unnecessary there (the projection/memory notes still
-> apply generally). **Memory addresses are build-specific to retail Halo PC** —
-> re-find them on other builds/versions.
+> **Scope:** retail Halo PC only. Halo *Custom Edition* already has built-in nametags, so the nametag mod is unnecessary there. Some projection, replay, and memory findings may still apply more generally.
+>
+> **Memory addresses are build-specific to retail Halo PC.** Re-find and verify them before using these scripts on other builds or versions.
 
 ---
 
 ## What's in here
 
-| File | What it is |
-| ---- | ---------- |
-| `scripts/nametags.lua` | **The mod.** The only file you deploy. |
-| `scripts/snippets/debug_core.lua` | Reusable JSON state-dump framework (paste-in). |
-| `scripts/snippets/tagcal.lua` | Reusable `draw_text` calibration overlay (paste-in). |
-| `tools/halo_debug_bridge.py` | Watches the dump file, screenshots the game, bundles both. |
-| `docs/chimera-lua-reference.md` | **Verified Chimera Lua field notes — start here.** |
-| `docs/nametags.md` | Project knowledge / architecture / open items. |
+| File                                      | What it is                                                                          |
+| ----------------------------------------- | ----------------------------------------------------------------------------------- |
+| `scripts/nametags.lua`                    | **Teammate nametag mod.** Standalone deployable script.                             |
+| `scripts/ghost-replay/hrl_ghost.lua`      | Main HRL ghost replay script and command interface.                                 |
+| `scripts/ghost-replay/replay_decode.lua`  | HRLREPLAY3 binary decoder.                                                          |
+| `scripts/ghost-replay/ghost_playback.lua` | Client-side ghost spawning, transform playback, and animation module.               |
+| `scripts/snippets/debug_core.lua`         | Reusable JSON state-dump framework designed to be pasted into another script.       |
+| `scripts/snippets/tagcal.lua`             | Reusable `draw_text` calibration overlay designed to be pasted into another script. |
+| `tools/halo_debug_bridge.py`              | Watches the debug dump, screenshots the game, and bundles both.                     |
+| `docs/chimera-lua-reference.md`           | Verified Chimera Lua and retail Halo PC memory notes.                               |
+| `docs/nametags.md`                        | Nametag architecture, findings, and open items.                                     |
+| `docs/ghost-replay.md`                    | Ghost replay architecture, installation, commands, status, and limitations.         |
+| `docs/hrlreplay3-format.md`               | HRLREPLAY3 header and binary format specification.                                  |
 
 ---
 
-## Nametags — features
+## Projects
 
-- **Teammate-only** (team filter) — a HUD/QoL aid, not enemy ESP (see *Fair play*).
-- **Anchored to the biped's head node**, so tags follow crouch and pose.
-- Works **on foot and in vehicles** (driver / passenger / gunner).
-- **No camera lag** — drawn during `precamera` with the current frame's camera.
-- **Auto-detects 4:3 vs widescreen** at runtime (any monitor aspect: 16:9 / 16:10 / ultrawide).
-- **Standalone** — zero dependency on the debug tooling.
+### Teammate nametags
+
+A client-side HUD/QoL mod that renders readable nametags above teammates.
+
+Features:
+
+* **Teammate-only** team filtering — not enemy ESP.
+* **Anchored to the biped's head node**, so tags follow crouching and animation poses.
+* Works **on foot and in vehicles**, including drivers, passengers, and gunners.
+* **No camera lag** — rendered during `precamera` using the current frame's camera state.
+* **Automatic aspect-ratio handling** for 4:3, 16:9, 16:10, ultrawide, and other monitor shapes.
+* **Standalone** — no dependency on the debug tooling.
+
+See [`docs/nametags.md`](docs/nametags.md) for architecture, verified findings, and open work.
+
+### HRL ghost replay
+
+An experimental client-side replay viewer for HRLREPLAY3 recordings produced by the Halo Racing League server tooling.
+
+Current working functionality:
+
+* Loads `.hrlreplay3` files from Chimera's `lua\data\global` directory.
+* Decodes the HRLREPLAY3 text header and compact binary sample stream.
+* Spawns a client-side cyborg biped.
+* Replays on-foot position and orientation.
+* Applies recorded animation indices and frames using **exact animation mode**.
+* Supports playback start, stop, restart, status, and animation-mode commands.
+* Includes decoder, cursor, and animation regression self-tests.
+
+Current limitations:
+
+* Vehicle ghost spawning is not yet implemented.
+* Detached-vehicle playback is not yet implemented.
+* Native Halo animation advancement is unreliable for client-spawned bipeds.
+* **Exact animation mode is therefore the default and recommended mode.**
+* The replay scripts are still experimental and may contain build-specific assumptions.
+
+See [`docs/ghost-replay.md`](docs/ghost-replay.md) for installation, commands, architecture, and current status.
+
+See [`docs/hrlreplay3-format.md`](docs/hrlreplay3-format.md) for the replay format specification.
 
 ---
 
-## Install
+## Installation
 
-1. Copy `scripts/nametags.lua` into your Chimera scripts folder:
-   `...\Documents\My Games\Halo\chimera\lua\scripts\global\`
-2. In-game (`~` for console): `chimera_lua_scripts_reload` — or just restart Halo.
+Requires Chimera with:
 
-Requires Chimera (`clua_version = 2.056`).
+```lua
+clua_version = 2.056
+```
 
-> Do **not** put the `snippets/` files in `scripts\global\` — Chimera would
-> auto-load them as inert separate scripts. They're paste-in tools (below).
+The default retail Halo PC Chimera directory is:
 
-### Config
+```text
+Documents\My Games\Halo\chimera\
+```
 
-Top of `nametags.lua`:
+### Teammate nametags
 
-- `FORCE_4_3` — leave `false`. The 4:3/widescreen aspect is auto-detected; this
-  is only a manual override in case the detection address breaks on a future build.
+Copy:
+
+```text
+scripts\nametags.lua
+```
+
+to:
+
+```text
+Documents\My Games\Halo\chimera\lua\scripts\global\nametags.lua
+```
+
+Then reload Chimera Lua in the in-game console:
+
+```text
+chimera_lua_scripts_reload
+```
+
+Restarting Halo also loads the script.
+
+#### Nametag configuration
+
+Configuration is located near the top of `nametags.lua`.
+
+* `FORCE_4_3` — leave this as `false` under normal use. Aspect handling is detected automatically. This option exists only as a fallback if the detection address breaks on another build.
+
+### HRL ghost replay
+
+Copy all three files from:
+
+```text
+scripts\ghost-replay\
+```
+
+into:
+
+```text
+Documents\My Games\Halo\chimera\lua\scripts\global\
+```
+
+The resulting layout should be:
+
+```text
+lua\scripts\global\
+├── hrl_ghost.lua
+├── replay_decode.lua
+└── ghost_playback.lua
+```
+
+Place replay files in:
+
+```text
+Documents\My Games\Halo\chimera\lua\data\global\
+```
+
+For example:
+
+```text
+lua\data\global\
+└── example-run.hrlreplay3
+```
+
+Reload Chimera Lua after installing or updating the scripts:
+
+```text
+chimera_lua_scripts_reload
+```
+
+Load and start a replay using:
+
+```text
+hrl_ghost_replay_load example-run
+hrl_ghost_replay_status
+hrl_ghost_replay_start
+```
+
+The `.hrlreplay3` extension may be omitted from the load command.
+
+#### Replay commands
+
+```text
+hrl_ghost_replay_load <filename[.hrlreplay3]>
+hrl_ghost_replay_start
+hrl_ghost_replay_stop
+hrl_ghost_replay_restart
+hrl_ghost_replay_status
+hrl_ghost_replay_mode <exact|native|off>
+```
+
+Regression tests:
+
+```text
+hrl_ghost_replay_decoder_test
+hrl_ghost_replay_cursor_test
+hrl_ghost_replay_animation_test
+```
+
+All three tests should pass before investigating live playback problems.
+
+#### Animation modes
+
+* `exact` — reliable default. Applies the recorded base-animation index and frame directly during playback.
+* `native` — experimental. Relies on Halo's native animation updater, which does not consistently advance animations for client-spawned bipeds.
+* `off` — disables replay animation writes.
 
 ---
 
-## Debugging (drop-in tools)
+## Debugging tools
 
-The debug framework and calibration overlay are kept **separate** because Chimera
-global scripts run in isolated Lua states (can't share globals) and allow only one
-`OnPreCamera` / `OnPreFrame` / `OnCommand` per script. So they're **callback-free
-snippets** you merge in only when testing:
+The debug framework and calibration overlay are kept separate because Chimera global scripts:
+
+* run in isolated Lua states;
+* cannot reliably share globals;
+* allow only one `OnPreCamera`, `OnPreFrame`, and `OnCommand` implementation per script.
+
+The files under `scripts/snippets/` are therefore **callback-free paste-in tools**, not standalone global scripts.
+
+> Do **not** copy the files under `scripts/snippets/` directly into `lua\scripts\global\`. Chimera would auto-load them as separate inert scripts.
+
+To use them with the nametag project:
 
 1. Paste the contents of `debug_core.lua` and/or `tagcal.lua` into `nametags.lua`.
-2. Uncomment the wiring in the `DEBUG / CALIBRATION` block at the bottom of `nametags.lua`.
+2. Uncomment the relevant wiring in the `DEBUG / CALIBRATION` block near the bottom of `nametags.lua`.
 
-Then:
-- **`dbgdump`** (console) — writes a JSON snapshot of camera/players/draw log.
-- **`tagcal`** (console) — toggles a calibration overlay (coordinate ruler + alignment tests).
-- **`tools/halo_debug_bridge.py`** — run it to auto-screenshot the game and bundle it with each dump.
+Available tools:
+
+* `dbgdump` — writes a JSON snapshot containing camera, player, and draw-log state.
+* `tagcal` — toggles the coordinate ruler and alignment-test overlay.
+* `tools/halo_debug_bridge.py` — watches for dump changes, captures a screenshot, and bundles both for analysis.
+
+The replay project also contains integrated diagnostics for animation fields, replay decoding, cursor progression, and client-spawned object behaviour.
 
 ---
 
 ## Repository layout
 
-```
+```text
 chimera-scripts/
 ├── README.md
 ├── LICENSE
-├── scripts/                      # DEPLOY: copy nametags.lua into chimera\lua\scripts\global\
+├── scripts/
 │   ├── nametags.lua
-│   └── snippets/                 # NOT auto-loaded — paste into a script to debug
+│   ├── ghost-replay/
+│   │   ├── hrl_ghost.lua
+│   │   ├── replay_decode.lua
+│   │   └── ghost_playback.lua
+│   └── snippets/
 │       ├── debug_core.lua
 │       └── tagcal.lua
 ├── tools/
 │   └── halo_debug_bridge.py
 └── docs/
-    ├── chimera-lua-reference.md  # verified findings guide (headline doc)
-    └── nametags.md               # project knowledge / architecture
+    ├── chimera-lua-reference.md
+    ├── nametags.md
+    ├── ghost-replay.md
+    └── hrlreplay3-format.md
 ```
+
+Deployment rules:
+
+* `scripts/nametags.lua` is copied directly into `chimera\lua\scripts\global\`.
+* All files under `scripts/ghost-replay/` are copied together into `chimera\lua\scripts\global\`.
+* Files under `scripts/snippets/` are pasted into another script when needed and should not be auto-loaded independently.
+* `.hrlreplay3` files belong under `chimera\lua\data\global\`, not in the scripts directory.
 
 ---
 
 ## Fair play
 
-Teammate-only nametags are a HUD/QoL feature — teammate positions are already
-surfaced by the game (nav markers), so this grants no advantage over opponents.
-Rendering **enemy** info would be ESP; the team filter keeps this on the fair
-side.
+The nametag mod displays teammate information only.
+
+Teammate positions are already surfaced by Halo through navigation markers, so clearer teammate labels are treated here as a HUD/QoL feature rather than an opponent-tracking advantage.
+
+Rendering hidden enemy information would constitute ESP. The explicit team filter keeps the nametag project on the fair-play side.
+
+The replay system displays previously recorded runs and does not expose live opponent information.
+
+---
+
+## Build compatibility
+
+The scripts and reference notes currently target retail Halo PC.
+
+Memory addresses, object layouts, callback behaviour, and internal animation structures may differ across:
+
+* Halo Custom Edition;
+* alternate executables;
+* patched releases;
+* compatibility layers;
+* future Chimera versions.
+
+Treat undocumented or hardcoded memory fields as build-specific until verified against live game state.
 
 ---
 
 ## Credits
 
-The baseline Chimera Lua model (event hooks, `draw_text`, `get_player`, timers,
-tags, name reading) is well laid out in **Chalwk's** blog,
-[Scripting with Chimera — Client-Side Lua](https://chalwk.github.io/blog/2026/05/17/halo-scripting-with-chimera/),
-which was the starting point. The findings in `docs/chimera-lua-reference.md` were
-then verified, corrected, and extended independently against live game state.
+The baseline Chimera Lua model — including event hooks, `draw_text`, `get_player`, timers, tag access, and player-name reading — is well documented in **Chalwk's** article:
+
+[Scripting with Chimera — Client-Side Lua](https://chalwk.github.io/blog/2026/05/17/halo-scripting-with-chimera/)
+
+That work was the starting point for this repository. The findings in `docs/chimera-lua-reference.md` were then verified, corrected, and extended independently against live retail Halo PC game state.
+
+The HRL replay format and server-side recorder originate from the Halo Racing League project. The Chimera replay scripts in this repository provide the client-side decoder and playback implementation.
+
+---
 
 ## License
 
-TODO — add a license (e.g. MIT) before publishing.
+TODO — add a license before publishing.
+
+MIT would be a reasonable default for the Lua scripts, Python tooling, and documentation, provided all incorporated code and references are compatible with that licence.
