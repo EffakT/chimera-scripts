@@ -35,6 +35,10 @@ A client-side HUD/QoL mod that renders readable nametags above teammates.
 Features:
 
 * **Teammate-only** team filtering — not enemy ESP.
+* **F3 visibility toggle** — press once to show nametags and again to hide them.
+* **Persistent visibility state** — the last F3 setting is restored after restarting Halo or reloading Chimera Lua.
+* **Enabled by default** on first launch, before a saved preference exists.
+* **Input protection** — F3 is ignored while chat or the console is open.
 * **Anchored to the biped's head node**, so tags follow crouching and animation poses.
 * Works **on foot and in vehicles**, including drivers, passengers, and gunners.
 * **No camera lag** — rendered during `precamera` using the current frame's camera state.
@@ -107,11 +111,14 @@ chimera_lua_scripts_reload
 
 Restarting Halo also loads the script.
 
+Press `F3` in game to toggle teammate nametags. The selected state is saved automatically to Chimera's script data directory and inherited on the next launch.
+
 #### Nametag configuration
 
 Configuration is located near the top of `nametags.lua`.
 
 * `FORCE_4_3` — leave this as `false` under normal use. Aspect handling is detected automatically. This option exists only as a fallback if the detection address breaks on another build.
+* `NAMETAGS_ENABLED_BY_DEFAULT` — controls the first-launch state when no saved preference exists. It defaults to `true`.
 
 ### HRL ghost replay
 

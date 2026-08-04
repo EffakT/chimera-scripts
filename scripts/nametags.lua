@@ -23,9 +23,69 @@ clua_version = 2.056
 -- override: set true to force 4:3 if that detection address ever breaks on a new
 -- Halo/Chimera build.
 FORCE_4_3 = false
+
+-- Used on first launch, before a persisted F3 toggle state exists.
+NAMETAGS_ENABLED_BY_DEFAULT = true
 -- ============================================================
 
 local nametags = {}  -- module-local state
+
+-- Halo's keyboard input buffer is a normalized key table, not a scan-code
+-- array. In that table escape is byte 0, F1 is byte 1, and F3 is byte 3.
+-- Runtime probing confirmed this buffer address and F3 offset for this build.
+local KEYBOARD_INPUT_ADDRESS = 0x006B1620
+local F3_KEY_OFFSET = 0x03
+-- Migrated from the legacy 0x64E788 flag using this build's confirmed data
+-- relocation (0x6B1620 - 0x64C550 = 0x650D0).
+local CHAT_STATE_ADDRESS = 0x006B3858
+
+local NAMETAG_STATUS_FILE = "enabled.txt"
+
+local function load_nametag_status()
+    local saved_status = read_file(NAMETAG_STATUS_FILE)
+    if saved_status then
+        saved_status = saved_status:match("^%s*(.-)%s*$")
+        if saved_status == "1" then return true end
+        if saved_status == "0" then return false end
+    end
+    return NAMETAGS_ENABLED_BY_DEFAULT
+end
+
+local function save_nametag_status(enabled)
+    if not write_file(NAMETAG_STATUS_FILE, enabled and "1" or "0") then
+        console_out("[nametags] ERROR: failed to save enabled state")
+    end
+end
+
+local nametags_enabled = load_nametag_status()
+local f3_was_pressed = false
+
+local function input_is_blocked()
+    local chat_is_open = read_byte(CHAT_STATE_ADDRESS) ~= 0
+    return chat_is_open or console_is_open()
+end
+
+local function handle_nametag_keybind()
+    local f3_pressed =
+        read_byte(KEYBOARD_INPUT_ADDRESS + F3_KEY_OFFSET) ~= 0
+
+    if not input_is_blocked() and f3_pressed and not f3_was_pressed then
+        nametags_enabled = not nametags_enabled
+        save_nametag_status(nametags_enabled)
+    end
+
+    -- Always track the physical state, including while input is blocked. This
+    -- prevents a key pressed in chat/console from toggling after it is closed.
+    f3_was_pressed = f3_pressed
+end
+
+function OnPreFrame()
+    handle_nametag_keybind()
+end
+
+-- Chimera's native hotkey handler samples this same keyboard table during
+-- preframe. At tick time the frame-input state may not yet be populated.
+set_callback("preframe", "OnPreFrame")
 
 -- Every draw attempt gets logged here, newest last. debug_core.lua will
 -- pick this up via the registered source below - no extra plumbing needed.
@@ -217,7 +277,7 @@ end
 -- Head node world position.
 --
 -- The biped's skeletal node array holds each bone's WORLD translation. The head
--- is node 12, at biped + 0x7E8 - CONFIRMED for the player biped: among all 19
+-- is node 12, at biped + 0x7E8 - CONFIRMED for the player biped: among all 19 
 -- position nodes (base 0x578, stride 0x34) it was
 -- both the highest-z node (feet+0.561) AND the closest to the eye/camera
 -- (feet+0.62), i.e. the head. Works for standing AND seated bipeds (nodes are
@@ -473,6 +533,8 @@ end
 -- from OnPreCamera, right after _last_camera is set from the current frame's
 -- camera args, projects with the current camera and removes the lag.
 function DrawNametags()
+    if not nametags_enabled then return end
+
     local local_idx = local_player_index
     if not local_idx then return end
 
