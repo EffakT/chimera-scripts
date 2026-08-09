@@ -35,11 +35,15 @@ local nametags = {}  -- module-local state
 -- Runtime probing confirmed this buffer address and F3 offset for this build.
 local KEYBOARD_INPUT_ADDRESS = 0x006B1620
 local F3_KEY_OFFSET = 0x03
+local F4_KEY_OFFSET = 0x04
+
 -- Migrated from the legacy 0x64E788 flag using this build's confirmed data
 -- relocation (0x6B1620 - 0x64C550 = 0x650D0).
 local CHAT_STATE_ADDRESS = 0x006B3858
 
 local NAMETAG_STATUS_FILE = "enabled.txt"
+
+local f4_active = false
 
 local function load_nametag_status()
     local saved_status = read_file(NAMETAG_STATUS_FILE)
@@ -68,10 +72,19 @@ end
 local function handle_nametag_keybind()
     local f3_pressed =
         read_byte(KEYBOARD_INPUT_ADDRESS + F3_KEY_OFFSET) ~= 0
+    local f4_pressed =
+        read_byte(KEYBOARD_INPUT_ADDRESS + F4_KEY_OFFSET) ~= 0
 
     if not input_is_blocked() and f3_pressed and not f3_was_pressed then
         nametags_enabled = not nametags_enabled
         save_nametag_status(nametags_enabled)
+    end
+
+    -- F4: hold to temporarily show enemy nametags
+    if not input_is_blocked() then
+        f4_active = f4_pressed
+    else
+        f4_active = false
     end
 
     -- Always track the physical state, including while input is blocked. This
@@ -555,6 +568,7 @@ function DrawNametags()
 
             -- teammate iff both teams are readable and equal
             local is_teammate = (my_team ~= nil and team ~= nil and team == my_team)
+            local is_enemy = team ~= nil and team ~= my_team
 
             -- DIAGNOSTIC (temporary): log the team decision so a team-game dump
             -- can confirm get_player+0x20 really separates friend from foe.
@@ -567,7 +581,13 @@ function DrawNametags()
                 is_teammate = is_teammate,
             })
 
-            if is_teammate and dyn and pstatic then
+            -- Normal nametags show teammates.
+            -- F4 temporarily reveals enemies while held.
+            local should_show_nametag =
+                is_teammate or
+                (is_enemy and f4_active)
+
+            if should_show_nametag and dyn and pstatic then
                 -- Anchor: prefer the real HEAD node (follows crouch/pose, works
                 -- seated & on-foot). Fall back to feet/vehicle position +
                 -- TAG_HEIGHT if the head read is implausible (see get_head_position).
