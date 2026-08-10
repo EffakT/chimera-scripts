@@ -421,15 +421,16 @@ to a real dump in-conversation.
    `precamera` had set the camera. `OnPreFrame` now only does the calibration
    overlay + event log.
 
-7. **Enemy nametags hidden — IMPLEMENTED (pending offset verification).**
-   `DrawNametags` renders a tag only when the other player's team equals the
-   local player's team (`get_player + 0x20`, equality only — mapping-agnostic).
-   Always on (no toggle, by request); fail-safe hides ALL tags if the local
-   team can't be read, so enemies are never shown. FFA note: if the gametype has
-   no real teams this may hide everyone (accepted). The `0x20` team offset is
-   still UNVERIFIED here — `team_log` (temporary) records per-player
-   `my_team`/`their_team`/`is_teammate`; confirm with a team-game dump + visual
-   (teammate tag shows, enemy hidden) before trusting.
+7. **Enemy nametags hidden by default — IMPLEMENTED (pending offset verification).**
+   `DrawNametags` renders teammate tags normally when nametags are enabled. Enemy
+   nametags are temporarily shown only while F4 is held, for administration purposes.
+   The F4 behaviour is hold-to-show rather than a persistent toggle. Team comparison
+   uses `get_player + 0x20`, equality only — mapping-agnostic. Fail-safe: if the local
+   team can't be read, no tags render. FFA note: if the gametype has no real teams this
+   may hide everyone (accepted). The `0x20` team offset is still UNVERIFIED here —
+   `team_log` (temporary) records per-player `my_team`/`their_team`/`is_teammate`;
+   confirm with a team-game dump + visual (teammate tag shows, enemy hidden by default)
+   before trusting.
 
 8. **Head-position field — FOUND + head-anchoring DONE (verified on-foot).**
    The biped has a skeletal **node array** of per-bone WORLD translations: base

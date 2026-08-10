@@ -12,7 +12,7 @@ Client-side **Lua for retail Halo PC (Combat Evolved) via [Chimera](https://gith
 
 | File                                      | What it is                                                                          |
 | ----------------------------------------- | ----------------------------------------------------------------------------------- |
-| `scripts/nametags.lua`                    | **Teammate nametag mod.** Standalone deployable script.                             |
+| `scripts/nametags.lua`                    | **Nametag mod.** Standalone deployable script.                             |
 | `scripts/ghost-replay/hrl_ghost.lua`      | Main HRL ghost replay script and command interface.                                 |
 | `scripts/ghost-replay/replay_decode.lua`  | HRLREPLAY3 binary decoder.                                                          |
 | `scripts/ghost-replay/ghost_playback.lua` | Client-side ghost spawning, transform playback, and animation module.               |
@@ -30,12 +30,13 @@ Client-side **Lua for retail Halo PC (Combat Evolved) via [Chimera](https://gith
 
 ### Teammate nametags
 
-A client-side HUD/QoL mod that renders readable nametags above teammates.
+A client-side HUD/QoL mod that renders readable nametags above teammates, with temporary enemy nametags available while holding F4 for administration purposes.
 
 Features:
 
-* **Teammate-only** team filtering — not enemy ESP.
+* **Team-filtered** nametags — teammates are shown normally; enemy nametags require holding F4.
 * **F3 visibility toggle** — press once to show nametags and again to hide them.
+* **F4 hold-to-show enemy nametags** — hold F4 to temporarily reveal enemy nametags; release F4 to hide them again.
 * **Persistent visibility state** — the last F3 setting is restored after restarting Halo or reloading Chimera Lua.
 * **Enabled by default** on first launch, before a saved preference exists.
 * **Input protection** — F3 is ignored while chat or the console is open.
@@ -112,6 +113,7 @@ chimera_lua_scripts_reload
 Restarting Halo also loads the script.
 
 Press `F3` in game to toggle teammate nametags. The selected state is saved automatically to Chimera's script data directory and inherited on the next launch.
+Hold `F4` in game to temporarily show enemy nametags. Release `F4` to hide enemy nametags again. F4 does not change the saved F3 nametag visibility state.
 
 #### Nametag configuration
 
@@ -263,11 +265,11 @@ Deployment rules:
 
 ## Fair play
 
-The nametag mod displays teammate information only.
+The nametag mod displays teammate information by default.
 
 Teammate positions are already surfaced by Halo through navigation markers, so clearer teammate labels are treated here as a HUD/QoL feature rather than an opponent-tracking advantage.
 
-Rendering hidden enemy information would constitute ESP. The explicit team filter keeps the nametag project on the fair-play side.
+Enemy nametags can be temporarily revealed by holding F4. This is intentionally a hold-to-show function rather than a persistent toggle, so enemy information is not left enabled accidentally.
 
 The replay system displays previously recorded runs and does not expose live opponent information.
 
