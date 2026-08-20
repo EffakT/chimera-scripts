@@ -12,7 +12,8 @@ Client-side **Lua for retail Halo PC (Combat Evolved) via [Chimera](https://gith
 
 | File                                      | What it is                                                                          |
 | ----------------------------------------- | ----------------------------------------------------------------------------------- |
-| `scripts/nametags.lua`                    | **Nametag mod.** Standalone deployable script.                             |
+| `scripts/nametags.lua`                    | **Nametag mod.** Standalone deployable script.                                      |
+| `scripts/lap_limit_sync.lua`              | **Lap Limit Syncer.** Standalone deployable script.                                 |
 | `scripts/ghost-replay/hrl_ghost.lua`      | Main HRL ghost replay script and command interface.                                 |
 | `scripts/ghost-replay/replay_decode.lua`  | HRLREPLAY3 binary decoder.                                                          |
 | `scripts/ghost-replay/ghost_playback.lua` | Client-side ghost spawning, transform playback, and animation module.               |
@@ -121,6 +122,32 @@ Configuration is located near the top of `nametags.lua`.
 
 * `FORCE_4_3` — leave this as `false` under normal use. Aspect handling is detected automatically. This option exists only as a fallback if the detection address breaks on another build.
 * `NAMETAGS_ENABLED_BY_DEFAULT` — controls the first-launch state when no saved preference exists. It defaults to `true`.
+
+### Lap Limit Sync
+
+Currently PC/Retail support only
+
+Copy:
+
+```text
+scripts\lap_limit_sync.lua
+```
+
+to:
+
+```text
+Documents\My Games\Halo\chimera\lua\scripts\global\lap_limit_sync.lua
+```
+
+Then reload Chimera Lua in the in-game console:
+
+```text
+chimera_lua_scripts_reload
+```
+
+Restarting Halo also loads the script.
+
+When a server reports a lap limit change via an RCON message, the script detects the message and updates the client-side lap limit accordingly.
 
 ### HRL ghost replay
 
@@ -238,6 +265,7 @@ chimera-scripts/
 ├── LICENSE
 ├── scripts/
 │   ├── nametags.lua
+│   ├── lap_limit_sync.lua
 │   ├── ghost-replay/
 │   │   ├── hrl_ghost.lua
 │   │   ├── replay_decode.lua
