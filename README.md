@@ -1,6 +1,6 @@
 # chimera-scripts
 
-Client-side **Lua for retail Halo PC (Combat Evolved) via [Chimera](https://github.com/SnowyMouse/chimera)** — currently including a teammate **nametag/HUD mod**, an experimental **HRL ghost replay system**, reusable debugging tools, and empirically verified engine-reference notes.
+Client-side **Lua for retail Halo PC (Combat Evolved) via [Chimera](https://github.com/SnowyMouse/chimera)** — currently including a teammate **nametag/HUD mod**, vehicle **first-person and look-back cameras**, lap-limit synchronisation, an experimental **HRL ghost replay system**, reusable debugging tools, and empirically verified engine-reference notes.
 
 > **Scope:** retail Halo PC only. Halo *Custom Edition* already has built-in nametags, so the nametag mod is unnecessary there. Some projection, replay, and memory findings may still apply more generally.
 >
@@ -14,6 +14,8 @@ Client-side **Lua for retail Halo PC (Combat Evolved) via [Chimera](https://gith
 | ----------------------------------------- | ----------------------------------------------------------------------------------- |
 | `scripts/nametags.lua`                    | **Nametag mod.** Standalone deployable script.                                      |
 | `scripts/lap_limit_sync.lua`              | **Lap Limit Syncer.** Standalone deployable script.                                 |
+| `scripts/first_person.lua`                | Toggleable first-person camera for occupied vehicles.                               |
+| `scripts/vehicle_look_back.lua`           | Hold-reload rear-view camera for vehicle drivers.                                   |
 | `scripts/ghost-replay/hrl_ghost.lua`      | Main HRL ghost replay script and command interface.                                 |
 | `scripts/ghost-replay/replay_decode.lua`  | HRLREPLAY3 binary decoder.                                                          |
 | `scripts/ghost-replay/ghost_playback.lua` | Client-side ghost spawning, transform playback, and animation module.               |
@@ -48,6 +50,47 @@ Features:
 * **Standalone** — no dependency on the debug tooling.
 
 See [`docs/nametags.md`](docs/nametags.md) for architecture, verified findings, and open work.
+
+### Vehicle cameras
+
+Two standalone scripts provide alternative vehicle views without changing map
+or vehicle tags.
+
+#### First-person camera
+
+`first_person.lua` moves the camera to the seated player's rendered head and
+uses the player's direct aim vector for orientation.
+
+Features:
+
+* Applies only while the local player occupies a vehicle; the normal on-foot
+  camera is untouched.
+* Uses the stock cyborg head-node world position with a sanity check before
+  replacing the camera.
+* Preserves vehicle roll while allowing the player to rotate the view freely.
+* Uses explicit `first_person on` and `first_person off` commands.
+* Works with the vehicle look-back script when both are installed.
+
+This is a camera override rather than a native vehicle first-person mode. The
+head-node offset assumes the stock player biped, and camera collision is not
+implemented.
+
+#### Vehicle look-back
+
+`vehicle_look_back.lua` provides a rear view while the local player is driving.
+
+Features:
+
+* Hold the configured reload input to look behind; release it to restore the
+  normal view.
+* Does not alter steering input.
+* Activates only for the driver, leaving passenger and gunner cameras alone.
+* Rotates the normal third-person camera around the vehicle.
+* Detects the companion first-person camera and keeps the view near the
+  driver's helmet instead of rotating it into the passenger side.
+
+The reversed camera can clip through level or vehicle geometry. This is a known
+limitation of the current prototype.
 
 ### HRL ghost replay
 
@@ -125,7 +168,7 @@ Configuration is located near the top of `nametags.lua`.
 
 ### Lap Limit Sync
 
-Currently PC/Retail support only
+Currently PC/Retail support only.
 
 Copy:
 
@@ -148,6 +191,42 @@ chimera_lua_scripts_reload
 Restarting Halo also loads the script.
 
 When a server reports a lap limit change via an RCON message, the script detects the message and updates the client-side lap limit accordingly.
+
+### Vehicle cameras
+
+Copy either or both scripts:
+
+```text
+scripts\first_person.lua
+scripts\vehicle_look_back.lua
+```
+
+to:
+
+```text
+Documents\My Games\Halo\chimera\lua\scripts\global\
+```
+
+Reload Chimera Lua after installing or updating them:
+
+```text
+chimera_lua_scripts_reload
+```
+
+The look-back script is active automatically. Hold the configured reload input
+while driving to look behind the vehicle.
+
+The first-person camera starts disabled. Control it from the in-game console:
+
+```text
+first_person on
+first_person off
+```
+
+When both scripts are installed, their filenames place `first_person.lua`
+before `vehicle_look_back.lua` in the tested global-script arrangement. This
+allows look-back to recognise the first-person head position and apply its
+first-person-specific rear view.
 
 ### HRL ghost replay
 
@@ -266,6 +345,8 @@ chimera-scripts/
 ├── scripts/
 │   ├── nametags.lua
 │   ├── lap_limit_sync.lua
+│   ├── first_person.lua
+│   ├── vehicle_look_back.lua
 │   ├── ghost-replay/
 │   │   ├── hrl_ghost.lua
 │   │   ├── replay_decode.lua
@@ -285,6 +366,7 @@ chimera-scripts/
 Deployment rules:
 
 * `scripts/nametags.lua` is copied directly into `chimera\lua\scripts\global\`.
+* `scripts/lap_limit_sync.lua`, `scripts/first_person.lua`, and `scripts/vehicle_look_back.lua` are standalone global scripts and can be copied directly into `chimera\lua\scripts\global\`.
 * All files under `scripts/ghost-replay/` are copied together into `chimera\lua\scripts\global\`.
 * Files under `scripts/snippets/` are pasted into another script when needed and should not be auto-loaded independently.
 * `.hrlreplay3` files belong under `chimera\lua\data\global\`, not in the scripts directory.
